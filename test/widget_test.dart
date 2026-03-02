@@ -11,20 +11,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:currency_converter/main.dart' as app;
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
+  testWidgets('App loads and shows dashboard title', (WidgetTester tester) async {
+    // Build the app and trigger a frame.
     await tester.pumpWidget(const app.DailyUtilityApp());
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    // Verify that the dashboard app bar title is present.
+    expect(find.text('Smart Converter'), findsOneWidget);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    // The search bar hint text should also be visible.
+    expect(find.text('Search utility...'), findsOneWidget);
 
-    // Verify that our counter has incremented.
+    // Ensure no counter text exists (legacy from boilerplate).
     expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
   });
 }

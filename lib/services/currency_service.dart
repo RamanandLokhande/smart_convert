@@ -1,50 +1,110 @@
-import 'dart:async';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class CurrencyService {
   CurrencyService();
 
-  // Mock exchange rates relative to USD
-  static final Map<String, double> _mockBase = {
-    'USD': 1.0,
-    'EUR': 0.92,
-    'INR': 82.0,
-    'GBP': 0.79,
-    'JPY': 148.0,
-    'AUD': 1.5,
-    'CAD': 1.35,
-  };
+  static const String _baseUrl =
+      "https://v6.exchangerate-api.com/v6/";
 
-  // Static convenience method (API-ready)
-  static Future<double> getExchangeRate(String from, String to) async {
-    await Future.delayed(const Duration(milliseconds: 600));
-    final fromRate = _mockBase[from] ?? 1.0;
-    final toRate = _mockBase[to] ?? 1.0;
-    return toRate / fromRate;
+  // --------------------------------------------------
+  // 🔹 Get Live Exchange Rate (PAIR ENDPOINT)
+  // --------------------------------------------------
+
+  Future<double> getExchangeRateInstance(
+      String fromCurrency, String toCurrency) async {
+    try {
+      // Load API key safely
+      final apiKey = dotenv.env['CURRENCY_API_KEY'];
+
+      if (apiKey == null || apiKey.isEmpty) {
+        throw Exception("API key not found in .env");
+      }
+
+      // Use PAIR endpoint (more stable for free plan)
+      final url = Uri.parse(
+          "$_baseUrl$apiKey/pair/$fromCurrency/$toCurrency");
+
+      final response = await http
+          .get(url)
+          .timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        if (data["result"] == "success") {
+          final rate = data["conversion_rate"];
+
+          if (rate == null) {
+            throw Exception("Invalid conversion rate");
+          }
+
+          return (rate as num).toDouble();
+        } else {
+          throw Exception(
+              "API Error: ${data["error-type"]}");
+        }
+      } else {
+        throw Exception(
+            "HTTP Error: ${response.statusCode}");
+      }
+    } catch (e) {
+      throw Exception("Exchange fetch failed: $e");
+    }
   }
 
-  static Future<double> convert(String from, String to, double amount) async {
-    final rate = await getExchangeRate(from, to);
+  // --------------------------------------------------
+  // 🔹 Convert Amount
+  // --------------------------------------------------
+
+  Future<double> convertCurrency(
+      String fromCurrency,
+      String toCurrency,
+      double amount) async {
+    final rate =
+        await getExchangeRateInstance(fromCurrency, toCurrency);
+
     return amount * rate;
   }
 
-  // Instance methods used by legacy UI
-  Future<double> convertCurrency(String fromCurrency, String toCurrency, double amount) async {
-    await Future.delayed(const Duration(milliseconds: 300));
-    final from = _mockBase[fromCurrency] ?? 1.0;
-    final to = _mockBase[toCurrency] ?? 1.0;
-    return (amount / from) * to;
+  // --------------------------------------------------
+  // 🔹 Static Convenience Methods
+  // --------------------------------------------------
+
+  static Future<double> getExchangeRate(
+      String from, String to) async {
+    final service = CurrencyService();
+    return service.getExchangeRateInstance(from, to);
   }
 
-  Future<double> getExchangeRateInstance(String fromCurrency, String toCurrency) async {
-    await Future.delayed(const Duration(milliseconds: 200));
-    final from = _mockBase[fromCurrency] ?? 1.0;
-    final to = _mockBase[toCurrency] ?? 1.0;
-    return to / from;
+  static Future<double> convert(
+      String from,
+      String to,
+      double amount) async {
+    final service = CurrencyService();
+    return service.convertCurrency(from, to, amount);
   }
+
+  // --------------------------------------------------
+  // 🔹 Supported Currency List
+  // --------------------------------------------------
 
   List<String> getSupportedCurrencies() {
-    return _mockBase.keys.toList()..sort();
+    return [
+      'USD',
+      'EUR',
+      'INR',
+      'GBP',
+      'JPY',
+      'AUD',
+      'CAD',
+    ];
   }
+
+  // --------------------------------------------------
+  // 🔹 Currency Symbols
+  // --------------------------------------------------
 
   String getCurrencySymbol(String currency) {
     const symbols = {
@@ -56,7 +116,7 @@ class CurrencyService {
       'CAD': '\$',
       'INR': '₹',
     };
+
     return symbols[currency] ?? currency;
   }
 }
-

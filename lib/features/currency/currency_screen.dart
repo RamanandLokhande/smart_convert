@@ -17,13 +17,15 @@ class CurrencyScreen extends StatefulWidget {
 }
 
 class _CurrencyScreenState extends State<CurrencyScreen> {
-  final _currencyService = CurrencyService();
-  final _historyService = HistoryService();
+  final CurrencyService _currencyService = CurrencyService();
+  final HistoryService _historyService = HistoryService();
 
   String _fromCurrency = 'USD';
   String _toCurrency = 'EUR';
   String _amount = '0';
-  double _convertedAmount = 0;
+  double _convertedAmount = 0.0;
+  double _exchangeRate = 0.0;
+
   bool _isLoading = false;
   late List<String> _currencies;
 
@@ -31,7 +33,12 @@ class _CurrencyScreenState extends State<CurrencyScreen> {
   void initState() {
     super.initState();
     _currencies = _currencyService.getSupportedCurrencies();
+    _convert();
   }
+
+  // --------------------------------------------------
+  // 🔹 Keypad Input Handling
+  // --------------------------------------------------
 
   void _onKeypadInput(String value) {
     setState(() {
@@ -53,31 +60,51 @@ class _CurrencyScreenState extends State<CurrencyScreen> {
         }
       }
     });
+
     _convert();
   }
 
+  // --------------------------------------------------
+  // 🔹 Conversion Logic (Live API)
+  // --------------------------------------------------
+
   Future<void> _convert() async {
-    if (_amount == '0' || _amount.isEmpty) return;
+    if (_amount.isEmpty) return;
+
+    final parsedAmount = double.tryParse(_amount);
+    if (parsedAmount == null) return;
 
     setState(() => _isLoading = true);
 
     try {
-      final amount = double.parse(_amount);
-      final converted = await _currencyService.convertCurrency(
+      final rate = await _currencyService.getExchangeRateInstance(
         _fromCurrency,
         _toCurrency,
-        amount,
       );
 
-      setState(() => _convertedAmount = converted);
+      setState(() {
+        _exchangeRate = rate;
+        _convertedAmount = parsedAmount * rate;
+      });
     } catch (e) {
+      if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Conversion failed')),
+        const SnackBar(
+          content: Text('Failed to fetch exchange rate'),
+          backgroundColor: Colors.red,
+        ),
       );
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
+
+  // --------------------------------------------------
+  // 🔹 Swap Currencies
+  // --------------------------------------------------
 
   void _swapCurrencies() {
     setState(() {
@@ -85,8 +112,13 @@ class _CurrencyScreenState extends State<CurrencyScreen> {
       _fromCurrency = _toCurrency;
       _toCurrency = temp;
     });
+
     _convert();
   }
+
+  // --------------------------------------------------
+  // 🔹 Save To History
+  // --------------------------------------------------
 
   void _saveConversion() {
     if (_amount == '0') return;
@@ -95,7 +127,8 @@ class _CurrencyScreenState extends State<CurrencyScreen> {
       type: 'Currency',
       title: 'Currency Conversion',
       value: '$_amount $_fromCurrency',
-      details: '$_convertedAmount $_toCurrency',
+      details:
+          '${_convertedAmount.toStringAsFixed(2)} $_toCurrency (Rate: $_exchangeRate)',
     );
 
     _historyService.addCalculation(history);
@@ -108,10 +141,16 @@ class _CurrencyScreenState extends State<CurrencyScreen> {
     );
   }
 
+  // --------------------------------------------------
+  // 🔹 UI
+  // --------------------------------------------------
+
   @override
   Widget build(BuildContext context) {
-    final fromSymbol = _currencyService.getCurrencySymbol(_fromCurrency);
-    final toSymbol = _currencyService.getCurrencySymbol(_toCurrency);
+    final fromSymbol =
+        _currencyService.getCurrencySymbol(_fromCurrency);
+    final toSymbol =
+        _currencyService.getCurrencySymbol(_toCurrency);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -176,6 +215,12 @@ class _CurrencyScreenState extends State<CurrencyScreen> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 12),
+                    if (!_isLoading)
+                      Text(
+                        '1 $_fromCurrency = ${_exchangeRate.toStringAsFixed(4)} $_toCurrency',
+                        style: AppTextStyles.bodySmall,
+                      ),
                   ],
                 ),
               ),
@@ -186,14 +231,14 @@ class _CurrencyScreenState extends State<CurrencyScreen> {
                 symbol: fromSymbol,
               ),
               const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: const Icon(Icons.arrow_downward, color: AppColors.primary),
-              ),
+              const Icon(Icons.arrow_downward,
+                  color: AppColors.primary),
               const SizedBox(height: 16),
               CurrencyDisplay(
                 currency: _toCurrency,
-                amount: _isLoading ? '...' : _convertedAmount.toStringAsFixed(2),
+                amount: _isLoading
+                    ? '...'
+                    : _convertedAmount.toStringAsFixed(2),
                 symbol: toSymbol,
               ),
               const SizedBox(height: 32),
@@ -245,7 +290,12 @@ class _CurrencySelector extends StatelessWidget {
             value: currency,
             onChanged: (value) => onChanged(value ?? currency),
             items: currencies
-                .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                .map(
+                  (e) => DropdownMenuItem(
+                    value: e,
+                    child: Text(e),
+                  ),
+                )
                 .toList(),
             underline: const SizedBox.shrink(),
             isExpanded: true,
