@@ -5,17 +5,19 @@ class FrequentItem extends StatelessWidget {
   final String label;
   final IconData icon;
   final Color color;
+  final VoidCallback? onTap;
 
   const FrequentItem({
     Key? key,
     required this.label,
     required this.icon,
     required this.color,
+    this.onTap,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    Widget child = Padding(
       padding: const EdgeInsets.only(right: 16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -44,5 +46,11 @@ class FrequentItem extends StatelessWidget {
         ],
       ),
     );
+
+    if (onTap != null) {
+      return GestureDetector(onTap: onTap, child: child);
+    }
+
+    return child;
   }
 }
